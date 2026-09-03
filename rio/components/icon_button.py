@@ -198,6 +198,8 @@ class IconButton(Component):
         # `min_width` & `min_height` are replaced with `size`
         del result["min_width"]
         del result["min_height"]
+        del result["max_width"]
+        del result["max_height"]
 
         return result
 

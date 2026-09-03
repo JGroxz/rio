@@ -52,6 +52,22 @@ def _float_or_zero(obj: object) -> float:
         return 0
 
 
+def _float_if_not_none(obj: object) -> float | None:
+    if obj is None:
+        return None
+
+    return _float_or_zero(obj)
+
+
+def _clamp_max_size(max_size: object, min_size: object) -> float | None:
+    max_size = _float_if_not_none(max_size)
+
+    if max_size is None:
+        return None
+
+    return max(max_size, _float_or_zero(min_size))
+
+
 def _serialize_special_types(obj: object) -> Jsonable:
     try:
         func = maybes.TYPE_NORMALIZERS[type(obj)]
@@ -107,8 +123,8 @@ def serialize_and_host_component(
     min_width = component.min_width
     min_height = component.min_height
 
-    # MAX-SIZE-BRANCH max_width = component.max_width
-    # MAX-SIZE-BRANCH max_height = component.max_height
+    max_width = component.max_width
+    max_height = component.max_height
 
     grow_x = component.grow_x
     grow_y = component.grow_y
@@ -135,10 +151,12 @@ def serialize_and_host_component(
         _float_or_zero(min_width),
         _float_or_zero(min_height),
     )
-    # MAX-SIZE-BRANCH result["_max_size_"] = (
-    # MAX-SIZE-BRANCH     _float_if_not_none(max_width),
-    # MAX-SIZE-BRANCH     _float_if_not_none(max_height),
-    # MAX-SIZE-BRANCH )
+    # A maximum below the minimum is contradictory. The minimum wins, so the
+    # frontend never receives an impossible constraint.
+    result["_max_size_"] = (
+        _clamp_max_size(max_width, min_width),
+        _clamp_max_size(max_height, min_height),
+    )
     result["_align_"] = (
         component.align_x,
         component.align_y,

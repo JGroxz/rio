@@ -276,6 +276,37 @@ class Component(abc.ABC, metaclass=ComponentMeta):
         Sizes are measured in "font heights", so a width of 1 is the same as the
         height of a single line of text.
 
+    `max_width`: The maximum amount of horizontal space this component will
+        take up. The component will never be wider than this, even if its
+        parent offers more space. It also never gets narrower than its natural
+        width: like every component in Rio, it is never smaller than its
+        content. To make a component narrower, reduce its natural width, e.g.
+        by letting text wrap.
+
+        Containers which distribute space between several children (such as
+        `rio.Row`) hand the leftover space to the other children. If nobody can
+        use it, or if the parent passes on all of its space regardless, the
+        component is positioned inside the leftover space using `align_x`.
+        Without an explicit alignment it is centered.
+
+        Sizes are measured in "font heights", so a width of 1 is the same as the
+        height of a single line of text.
+
+    `max_height`: The maximum amount of vertical space this component will
+        take up. The component will never be taller than this, even if its
+        parent offers more space. It also never gets shorter than its natural
+        height: like every component in Rio, it is never smaller than its
+        content.
+
+        Containers which distribute space between several children (such as
+        `rio.Column`) hand the leftover space to the other children. If nobody
+        can use it, or if the parent passes on all of its space regardless, the
+        component is positioned inside the leftover space using `align_y`.
+        Without an explicit alignment it is centered.
+
+        Sizes are measured in "font heights", so a width of 1 is the same as the
+        height of a single line of text.
+
     `grow_x`: Whether this component should request all the superfluous
         horizontal space available in its parent. Containers normally divide up
         any extra space evenly between their children. However, if components
@@ -314,8 +345,8 @@ class Component(abc.ABC, metaclass=ComponentMeta):
     min_width: float = 0
     min_height: float = 0
 
-    # MAX-SIZE-BRANCH max_width: float | None = None
-    # MAX-SIZE-BRANCH max_height: float | None = None
+    max_width: float | None = None
+    max_height: float | None = None
 
     grow_x: bool = False
     grow_y: bool = False

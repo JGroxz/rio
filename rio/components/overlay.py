@@ -67,6 +67,8 @@ class Overlay(FundamentalComponent):
         # would behave in unexpected ways.
         del result["min_width"]
         del result["min_height"]
+        del result["max_width"]
+        del result["max_height"]
         del result["grow_x"]
         del result["grow_y"]
         del result["margin"]
