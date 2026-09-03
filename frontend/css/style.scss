@@ -95,6 +95,24 @@
     @include utils.shared-component-style();
 }
 
+// Maximum-only axes center the inner element with a flexbox instead of a
+// transform, see `_updateAlignAndMaxSize`
+.rio-align-outer-flex {
+    display: flex;
+}
+
+// With a maximum the child is stretched by flexbox rather than by a
+// percentage, which would resolve against the clamped wrapper and defeat the
+// `min-content` floor, see `_updateAlignAndMaxSize`
+.rio-align-inner-flex {
+    display: flex;
+    flex-direction: column;
+
+    & > * {
+        flex: 1 1 auto;
+    }
+}
+
 .rio-align-inner {
     position: relative;
 

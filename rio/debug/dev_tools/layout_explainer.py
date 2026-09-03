@@ -280,6 +280,7 @@ class LayoutExplainer:
             allocated_size = self._layout.allocated_inner_width
             allocated_size_before_alignment = self._layout.allocated_outer_width
             specified_min_size = self.component.min_width
+            specified_max_size = self.component.max_width
             natural_size = self._layout.natural_width
             total_margin = (
                 self.component._effective_margin_left_
@@ -296,6 +297,7 @@ class LayoutExplainer:
                 self._layout.allocated_outer_height
             )
             specified_min_size = self.component.min_height
+            specified_max_size = self.component.max_height
             natural_size = self._layout.natural_height
             total_margin = (
                 self.component._effective_margin_top_
@@ -348,7 +350,39 @@ class LayoutExplainer:
                 f"This is more than its natural {axis_name} of {natural_size:.1f}."
             )
 
-            if alignment is None:
+            if (
+                specified_max_size is not None
+                and natural_size <= specified_max_size + 0.1
+                and allocated_size_before_alignment
+                > specified_max_size + total_margin + 0.1
+            ):
+                result.write(
+                    f"\n\nThe component stops at its `max_{axis_name}` of {specified_max_size:.1f}"
+                )
+
+                if alignment is None:
+                    result.write(
+                        " and is centered in the leftover space, because no alignment is set."
+                    )
+                elif alignment <= 0.03:
+                    result.write(
+                        f" and is located at the {start} of the leftover space."
+                    )
+                elif 0.47 <= alignment <= 0.53:
+                    result.write(" and is centered in the leftover space.")
+                elif alignment >= 0.97:
+                    result.write(
+                        f" and is located at the {end} of the leftover space."
+                    )
+                else:
+                    result.write(
+                        f", with {alignment * 100:.0f}% of the leftover space on the {start}, and the remainder on the {end}."
+                    )
+
+                suggest_grow(
+                    f"Increase or remove the `max_{axis_name}` of the component"
+                )
+            elif alignment is None:
                 result.write(
                     " Because no alignment is set, it uses all of that space."
                 )
@@ -394,6 +428,24 @@ class LayoutExplainer:
                 result.write(
                     f"\n\nThe largest child is the {number_to_rank(largest_child_index + 1)} one (a `{type(largest_child).__name__}`), with a {axis_name} of {getattr(largest_child_layout, f'requested_outer_{axis_name}'):,.1f}. This is what determined the component's natural {axis_name}."
                 )
+
+        # Warn if the maximum size contradicts the minimum one
+        if (
+            specified_max_size is not None
+            and specified_max_size < specified_min_size
+        ):
+            self.warnings.append(
+                f"The component's `max_{axis_name}` of {specified_max_size:.1f} is less than its `min_{axis_name}` of {specified_min_size:.1f}. The minimum takes precedence, so the maximum has no effect."
+            )
+
+        # Warn if the specified maximum size is less than the natural one
+        if (
+            specified_max_size is not None
+            and specified_max_size < natural_size - 0.1
+        ):
+            self.warnings.append(
+                f"The explicitly set maximum {axis_name} of {specified_max_size:.1f} has no effect, because it is less than the component's natural {axis_name} of {natural_size:.1f}. Components can never be smaller than their natural size. Reduce the natural {axis_name} instead, e.g. by letting text wrap or ellipsize."
+            )
 
         # Warn if the specified minimum size is less than the natural one
         if 0 < specified_min_size < natural_size:

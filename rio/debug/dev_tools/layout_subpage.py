@@ -14,11 +14,13 @@ class SizeControls(rio.Component):
     label: t.Literal["width", "height"]
     grow: bool
     min_value: float
+    max_value: float | None
 
     _: dataclasses.KW_ONLY
 
     on_grow_change: rio.EventHandler[bool] = None
     on_min_change: rio.EventHandler[float] = None
+    on_max_change: rio.EventHandler[float | None] = None
 
     async def _on_grow_change(
         self,
@@ -34,22 +36,65 @@ class SizeControls(rio.Component):
         self.min_value = event.value
         await self.call_event_handler(self.on_min_change, self.min_value)
 
+    async def _on_max_switch_change(
+        self,
+        event: rio.SwitchChangeEvent,
+    ) -> None:
+        # Start the maximum at the minimum, or a round number if that's zero
+        self.max_value = (self.min_value or 10) if event.is_on else None
+        await self.call_event_handler(self.on_max_change, self.max_value)
+
+    async def _on_max_value_change(
+        self,
+        event: rio.NumberInputChangeEvent,
+    ) -> None:
+        self.max_value = event.value
+        await self.call_event_handler(self.on_max_change, self.max_value)
+
     def build(self) -> rio.Component:
         axis_xy = "x" if self.label == "width" else "y"
 
-        return rio.Row(
-            rio.NumberInput(
-                label=f"Min {self.label.capitalize()}",
-                value=self.bind().min_value,
-                on_change=self._on_min_value_change,
-                grow_x=True,
+        # If enabled, add an input to control the maximum
+        if self.max_value is None:
+            max_input = None
+        else:
+            max_input = rio.NumberInput(
+                label=f"Max {self.label.capitalize()}",
+                value=self.max_value,
+                minimum=0,
+                on_change=self._on_max_value_change,
+                margin_top=0.5,
+            )
+
+        return rio.Column(
+            rio.Row(
+                rio.NumberInput(
+                    label=f"Min {self.label.capitalize()}",
+                    value=self.bind().min_value,
+                    on_change=self._on_min_value_change,
+                    grow_x=True,
+                ),
+                rio.Spacer(min_width=1, grow_x=False),
+                rio.Switch(
+                    is_on=self.bind().grow,
+                    on_change=lambda event: self._on_grow_change,
+                ),
+                rio.Text(f"Grow {axis_xy.capitalize()}"),
+                spacing=0.5,
             ),
-            rio.Spacer(min_width=1, grow_x=False),
-            rio.Switch(
-                is_on=self.bind().grow,
-                on_change=lambda event: self._on_grow_change,
+            rio.Row(
+                rio.Switch(
+                    is_on=self.max_value is not None,
+                    on_change=self._on_max_switch_change,
+                ),
+                rio.Text(
+                    f"Max {self.label.capitalize()}",
+                    align_x=0,
+                    grow_x=True,
+                ),
+                spacing=0.5,
             ),
-            rio.Text(f"Grow {axis_xy.capitalize()}"),
+            rio.Switcher(max_input),
             spacing=0.5,
         )
 
@@ -403,28 +448,37 @@ separately, or use one of the shortcuts `margin`, `margin_x`, `margin_y`.
                 label="width",
                 grow=target_component.grow_x,
                 min_value=target_component.min_width,
+                max_value=target_component.max_width,
                 on_grow_change=lambda value: self._update_target_attribute(
                     "grow_x", value
                 ),
                 on_min_change=lambda value: self._update_target_attribute(
                     "min_width", value
                 ),
+                on_max_change=lambda value: self._update_target_attribute(
+                    "max_width", value
+                ),
             ),
             SizeControls(
                 label="height",
                 grow=target_component.grow_y,
                 min_value=target_component.min_height,
+                max_value=target_component.max_height,
                 on_grow_change=lambda value: self._update_target_attribute(
                     "grow_y", value
                 ),
                 on_min_change=lambda value: self._update_target_attribute(
                     "min_height", value
                 ),
+                on_max_change=lambda value: self._update_target_attribute(
+                    "max_height", value
+                ),
             ),
             HelpAnchor(
                 """
 By default, components take up as little space as necessary. You can set a
-custom `min_width` and `min_height` to make them take up more space.
+custom `min_width` and `min_height` to make them take up more space, or a
+`max_width` and `max_height` to stop them from growing past a certain size.
 
 Components with `grow_x` or `grow_y` take priority when too much space is
 available. This is only relevant in components that have multiple children, such

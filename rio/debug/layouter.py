@@ -106,55 +106,86 @@ def _linear_container_get_major_axis_natural_size(
     return result
 
 
+def _distribute_superfluous_space(
+    available_space: float,
+    base_sizes: list[float],
+    grow_factors: list[float],
+    max_sizes: list[float | None],
+) -> list[float]:
+    """
+    Splits `available_space` between children, starting from their
+    `base_sizes`. Superfluous space is handed out proportionally to the
+    `grow_factors`. Children that would exceed their maximum size are frozen
+    at it and the remainder is redistributed among the others.
+
+    This mirrors the "resolve flexible lengths" step of CSS flexbox, which is
+    what the client uses.
+    """
+    sizes = list(base_sizes)
+    frozen = [factor <= 0 for factor in grow_factors]
+
+    while True:
+        free_space = available_space - sum(sizes)
+        active = [i for i in range(len(sizes)) if not frozen[i]]
+
+        if free_space <= 0 or not active:
+            return sizes
+
+        total_factor = sum(grow_factors[i] for i in active)
+
+        # Hand out the space, but freeze anyone that would overshoot. If that
+        # happens, the space they didn't take is redistributed in the next
+        # round.
+        any_frozen = False
+
+        for i in active:
+            target = sizes[i] + free_space * grow_factors[i] / total_factor
+            max_size = max_sizes[i]
+
+            if max_size is not None and target > max_size:
+                sizes[i] = max(sizes[i], max_size)
+                frozen[i] = True
+                any_frozen = True
+
+        if any_frozen:
+            continue
+
+        for i in active:
+            sizes[i] += free_space * grow_factors[i] / total_factor
+
+        return sizes
+
+
 def _linear_container_get_major_axis_allocated_sizes(
     container_allocated_size: float,
     child_requested_sizes: list[float],
     child_growers: list[bool],
+    child_max_sizes: list[float | None],
     spacing: float,
     proportions: None | t.Literal["homogeneous"] | t.Sequence[float],
 ) -> list[tuple[float, float]]:
-    starts_and_sizes: list[tuple[float, float]] = []
-
     # Allow the code below to assume there is at least one child
     if not child_requested_sizes:
         return []
 
+    available_space = container_allocated_size - spacing * (
+        len(child_requested_sizes) - 1
+    )
+
     # No proportions
     if proportions is None:
-        cur_x = 0
-
-        # Prepare for superfluous space
-        additional_space = (
-            container_allocated_size
-            - sum(child_requested_sizes)
-            - spacing * (len(child_requested_sizes) - 1)
-        )
-
-        n_growers = sum(child_growers)
-
-        if n_growers == 0:
-            additional_space_per_component = additional_space / len(
-                child_requested_sizes
-            )
-            additional_space_per_grower = 0
+        # If nobody wants to grow, all of them do
+        if any(child_growers):
+            grow_factors = [1.0 if grow else 0.0 for grow in child_growers]
         else:
-            additional_space_per_component = 0
-            additional_space_per_grower = additional_space / n_growers
+            grow_factors = [1.0] * len(child_requested_sizes)
 
-        for child_requested_size, child_grow in zip(
-            child_requested_sizes, child_growers
-        ):
-            # Determine how much space to pass on
-            child_allocated_size = (
-                child_requested_size + additional_space_per_component
-            )
-
-            if child_grow:
-                child_allocated_size += additional_space_per_grower
-
-            # Store the result
-            starts_and_sizes.append((cur_x, child_allocated_size))
-            cur_x += child_allocated_size + spacing
+        sizes = _distribute_superfluous_space(
+            available_space=available_space,
+            base_sizes=child_requested_sizes,
+            grow_factors=grow_factors,
+            max_sizes=child_max_sizes,
+        )
 
     # Proportions
     else:
@@ -163,20 +194,22 @@ def _linear_container_get_major_axis_allocated_sizes(
         else:
             proportions = list(proportions)
 
-        # Find the width of 1 unit of proportions
-        available_space = container_allocated_size - spacing * (
-            len(child_requested_sizes) - 1
+        sizes = _distribute_superfluous_space(
+            available_space=available_space,
+            base_sizes=[0.0] * len(child_requested_sizes),
+            grow_factors=[float(proportion) for proportion in proportions],
+            max_sizes=child_max_sizes,
         )
-        width_per_proportion = available_space / sum(proportions)
 
-        # Pass on the correct amount of space
-        cur_x = 0
+    # Position the children one after the other. If everyone is capped, the
+    # leftover stays at the end, just like in a flexbox.
+    starts_and_sizes: list[tuple[float, float]] = []
+    cur_x = 0
 
-        for proportion in proportions:
-            starts_and_sizes.append((cur_x, width_per_proportion * proportion))
-            cur_x += width_per_proportion * proportion + spacing
+    for size in sizes:
+        starts_and_sizes.append((cur_x, size))
+        cur_x += size + spacing
 
-    # Done
     return starts_and_sizes
 
 
@@ -186,17 +219,63 @@ def calculate_alignment(
     margin_start: float,
     margin_end: float,
     align: float | None,
+    max_size: float | None = None,
 ) -> tuple[float, float]:
-    # If no alignment is specified pass on all space
-    if align is None:
-        return margin_start, allocated_outer_size - margin_start - margin_end
+    available_space = allocated_outer_size - margin_start - margin_end
 
-    # If a margin is specified, only pass on the minimum amount of space and
-    # distribute superfluous space
-    additional_space = (
-        allocated_outer_size - requested_inner_size - margin_start - margin_end
-    )
-    return margin_start + additional_space * align, requested_inner_size
+    if align is None:
+        # If no alignment is specified pass on all space
+        if max_size is None:
+            return margin_start, available_space
+
+        # The component stops at its maximum, but never below its natural
+        # size. If that still fills the space, nothing is left to place.
+        inner_size = max(min(available_space, max_size), requested_inner_size)
+
+        if inner_size >= available_space:
+            return margin_start, available_space
+
+        # The parent handed down more than the component may use. It is
+        # centered in the leftover.
+        align = 0.5
+    else:
+        # If an alignment is specified, only pass on the minimum amount of
+        # space and distribute superfluous space
+        inner_size = requested_inner_size
+
+    additional_space = available_space - inner_size
+    return margin_start + additional_space * align, inner_size
+
+
+def _effective_max_size(
+    max_size: float | None,
+    min_size: float,
+) -> float | None:
+    """
+    A maximum below the minimum is contradictory. The minimum wins, matching
+    what is sent to the client.
+    """
+    if not isinstance(max_size, (int, float)):
+        return None
+
+    return max(max_size, min_size)
+
+
+def _clamp_requested_size(
+    natural_size: float,
+    min_size: float,
+    max_size: float | None,
+) -> float:
+    """
+    The maximum caps the request, but never below the natural size:
+    components are never smaller than their content.
+    """
+    result = max(natural_size, min_size)
+
+    if max_size is not None:
+        result = max(natural_size, min(result, max_size))
+
+    return result
 
 
 class Layouter:
@@ -381,8 +460,10 @@ class Layouter:
                 if isinstance(component.min_width, (int, float))
                 else 0
             )
-            layout_should.requested_inner_width = max(
-                layout_should.natural_width, min_width
+            layout_should.requested_inner_width = _clamp_requested_size(
+                natural_size=layout_should.natural_width,
+                min_size=min_width,
+                max_size=_effective_max_size(component.max_width, min_width),
             )
 
             # Account for rounding errors
@@ -402,6 +483,7 @@ class Layouter:
                 margin_start=component._effective_margin_left_,
                 margin_end=component._effective_margin_right_,
                 align=component.align_x,
+                max_size=self._effective_max_width(component),
             )
             layout.left_in_viewport_inner = layout.left_in_viewport_outer + left
             layout.allocated_inner_width = width
@@ -422,8 +504,10 @@ class Layouter:
                 if isinstance(component.min_height, (int, float))
                 else 0
             )
-            layout_should.requested_inner_height = max(
-                layout_should.natural_height, min_height
+            layout_should.requested_inner_height = _clamp_requested_size(
+                natural_size=layout_should.natural_height,
+                min_size=min_height,
+                max_size=_effective_max_size(component.max_height, min_height),
             )
 
             layout_should.requested_outer_height = (
@@ -442,11 +526,56 @@ class Layouter:
                 margin_start=component._effective_margin_top_,
                 margin_end=component._effective_margin_bottom_,
                 align=component.align_y,
+                max_size=self._effective_max_height(component),
             )
             layout.top_in_viewport_inner = layout.top_in_viewport_outer + top
             layout.allocated_inner_height = height
 
             self._update_allocated_height(component)
+
+    def _effective_max_width(self, component: rio.Component) -> float | None:
+        min_width = (
+            component.min_width
+            if isinstance(component.min_width, (int, float))
+            else 0
+        )
+        return _effective_max_size(component.max_width, min_width)
+
+    def _effective_max_height(self, component: rio.Component) -> float | None:
+        min_height = (
+            component.min_height
+            if isinstance(component.min_height, (int, float))
+            else 0
+        )
+        return _effective_max_size(component.max_height, min_height)
+
+    def _effective_max_outer_width(
+        self, component: rio.Component
+    ) -> float | None:
+        max_width = self._effective_max_width(component)
+
+        if max_width is None:
+            return None
+
+        return (
+            max_width
+            + component._effective_margin_left_
+            + component._effective_margin_right_
+        )
+
+    def _effective_max_outer_height(
+        self, component: rio.Component
+    ) -> float | None:
+        max_height = self._effective_max_height(component)
+
+        if max_height is None:
+            return None
+
+        return (
+            max_height
+            + component._effective_margin_top_
+            + component._effective_margin_bottom_
+        )
 
     @specialized
     def _update_natural_width(
@@ -608,6 +737,10 @@ class Layouter:
             container_allocated_size=layout.allocated_inner_width,
             child_requested_sizes=child_widths,
             child_growers=[child.grow_x for child in direct_children],
+            child_max_sizes=[
+                self._effective_max_outer_width(child)
+                for child in direct_children
+            ],
             spacing=component.spacing,
             proportions=component.proportions,
         )
@@ -833,6 +966,10 @@ class Layouter:
             container_allocated_size=layout.allocated_inner_height,
             child_requested_sizes=child_heights,
             child_growers=[child.grow_y for child in direct_children],
+            child_max_sizes=[
+                self._effective_max_outer_height(child)
+                for child in direct_children
+            ],
             spacing=component.spacing,
             proportions=component.proportions,
         )

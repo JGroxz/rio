@@ -9,6 +9,7 @@ import { ColorPickerComponent } from "./components/colorPicker";
 import { ColumnComponent, RowComponent } from "./components/linearContainers";
 import {
     ComponentBase,
+    ComponentState,
     DeltaStateFromBackend,
 } from "./components/componentBase";
 import { ComponentId } from "./dataModels";
@@ -268,9 +269,10 @@ export function updateComponentStates(
 
     let context = new ComponentStatesUpdateContext();
 
-    // Keep track of all components whose `_grow_` changed, because their
-    // parents have to be notified so they can update their CSS
-    let growChangedComponents: ComponentBase[] = [];
+    // Keep track of all components whose layout request (`_grow_`, `_max_size_`,
+    // `_margin_`) changed, because their parents have to be notified so they can
+    // update their CSS
+    let layoutChangedComponents: ComponentBase[] = [];
 
     // Make sure all components mentioned in the message have a corresponding
     // HTML element
@@ -280,14 +282,9 @@ export function updateComponentStates(
 
         // This is a reused component, no need to instantiate a new one
         if (component) {
-            // Check if its `_grow_` changed
-            if (deltaState._grow_ !== undefined) {
-                if (
-                    deltaState._grow_[0] !== component.state._grow_[0] ||
-                    deltaState._grow_[1] !== component.state._grow_[1]
-                ) {
-                    growChangedComponents.push(component);
-                }
+            // Check if its layout request changed
+            if (hasLayoutRequestChanged(component.state, deltaState)) {
+                layoutChangedComponents.push(component);
             }
             continue;
         }
@@ -345,14 +342,14 @@ export function updateComponentStates(
         Object.assign(component.state, deltaState);
     }
 
-    // Notify the parents of all elements whose `_grow_` changed to update their
-    // CSS
+    // Notify the parents of all elements whose layout request changed to
+    // update their CSS
     let parents = new Set<ComponentBase>();
-    for (let child of growChangedComponents) {
+    for (let child of layoutChangedComponents) {
         parents.add(child.parent!);
     }
     for (let parent of parents) {
-        parent.onChildGrowChanged();
+        parent.onChildLayoutChanged();
     }
 
     context.dispatchEvent(new Event("all states updated"));
@@ -464,4 +461,34 @@ export class ComponentStatesUpdateContext extends EventTarget {
     ): void {
         super.addEventListener(type, callback, options);
     }
+}
+
+/// Parents translate some of their children's layout requests (grow, maximum
+/// size, margins) into CSS on wrapper elements they own. Returns whether any of
+/// those changed in the given delta.
+function hasLayoutRequestChanged(
+    state: ComponentState,
+    deltaState: DeltaStateFromBackend
+): boolean {
+    for (let key of ["_grow_", "_max_size_", "_margin_"] as const) {
+        let newValue = deltaState[key] as readonly unknown[] | undefined;
+
+        if (newValue === undefined) {
+            continue;
+        }
+
+        let oldValue = state[key] as readonly unknown[] | undefined;
+
+        if (oldValue === undefined) {
+            return true;
+        }
+
+        for (let i = 0; i < newValue.length; i++) {
+            if (newValue[i] !== oldValue[i]) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }

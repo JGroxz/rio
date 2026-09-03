@@ -148,6 +148,8 @@ class ComponentAttributes(rio.Component):
             if prop_name in (
                 "min_width",
                 "min_height",
+                "max_width",
+                "max_height",
                 "grow_x",
                 "grow_y",
                 "margin",
@@ -226,6 +228,20 @@ class ComponentAttributes(rio.Component):
             size_grid.add_label("min", column=0)
             size_grid.add_value(py_min_width_str, column=1, justify="right")
             size_grid.add_value(py_min_height_str, column=2, justify="right")
+            size_grid.row += 1
+
+            # The maximum size as specified in Python
+            size_grid.add_label("max", column=0)
+            size_grid.add_value(
+                _format_optional_size(debug_details.get("max_width")),
+                column=1,
+                justify="right",
+            )
+            size_grid.add_value(
+                _format_optional_size(debug_details.get("max_height")),
+                column=2,
+                justify="right",
+            )
             size_grid.row += 1
 
             # The component's natural size
@@ -406,6 +422,16 @@ class DetailsGrid:
 
     def as_rio_component(self) -> rio.Component:
         return self.grid
+
+
+def _format_optional_size(value: object) -> str:
+    if value is None:
+        return "-"
+
+    if isinstance(value, (int, float)):
+        value = round(value, 2)
+
+    return repr(value)
 
 
 def repr_attribute(value: object) -> str:
