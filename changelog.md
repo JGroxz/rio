@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Improvements
+
+- Added `max_width` and `max_height` to all components. A component never grows
+  past its maximum (and, like always, never shrinks below its natural size);
+  containers such as `rio.Row` hand the leftover space to the other children,
+  and where nobody can use it the component is positioned by its alignment
+  (centered by default). An aligned component with a maximum still fills the
+  space up to its maximum, like CSS `max-width` with auto margins
+
+### Breaking
+
+- `max_width` and `max_height` are now built-in attributes of `rio.Component`.
+  A custom component that declared a field with either name now sets the
+  component's own maximum size as well; rename such fields
+
 ## 0.12.3
 
 ### Improvements
