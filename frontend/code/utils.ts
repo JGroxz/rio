@@ -512,16 +512,18 @@ export function getComponentLayout(component: ComponentBase): ComponentLayout {
     result.naturalWidth = naturalSizeInPixels[0] / pixelsPerRem;
     result.naturalHeight = naturalSizeInPixels[1] / pixelsPerRem;
 
-    // The requested size is the maximum of the natural size and the explicitly
-    // provided size
-    result.requestedInnerWidth = Math.max(
+    // The requested size is the natural size, clamped to the explicitly
+    // provided limits
+    result.requestedInnerWidth = clampRequestedSize(
         result.naturalWidth,
-        component.state._min_size_[0]
+        component.state._min_size_[0],
+        component.state._max_size_[0]
     );
 
-    result.requestedInnerHeight = Math.max(
+    result.requestedInnerHeight = clampRequestedSize(
         result.naturalHeight,
-        component.state._min_size_[1]
+        component.state._min_size_[1],
+        component.state._max_size_[1]
     );
 
     // Apply margins to arrive at the requested outer size
@@ -538,6 +540,26 @@ export function getComponentLayout(component: ComponentBase): ComponentLayout {
     return result;
 }
 globalThis.getComponentLayout = getComponentLayout;
+
+/// The maximum caps the request, but never below the natural size: components
+/// are never smaller than their content. A maximum below the minimum is
+/// ignored, the minimum wins.
+function clampRequestedSize(
+    naturalSize: number,
+    minSize: number,
+    maxSize: number | null
+): number {
+    let result = Math.max(naturalSize, minSize);
+
+    if (maxSize !== null) {
+        result = Math.max(
+            naturalSize,
+            Math.min(result, Math.max(maxSize, minSize))
+        );
+    }
+
+    return result;
+}
 
 export function getNaturalSizeInPixels(element: HTMLElement): [number, number] {
     // In order to determine the natural size, the component needs to be removed

@@ -8,6 +8,7 @@ import {
     ComponentBase,
     ComponentState,
     DeltaState,
+    applyMaxOuterSize,
     Key,
 } from "./componentBase";
 import { CustomTreeItemComponent } from "./customTreeItem";
@@ -52,7 +53,7 @@ export class ListViewComponent extends ComponentBase<ListViewState> {
 
             // Update the styles of the children
             this.state.children = deltaState.children;
-            this.onChildGrowChanged();
+            this.onChildLayoutChanged();
 
             this.updateIsSelected();
             needSelectabilityUpdate = true;
@@ -96,7 +97,7 @@ export class ListViewComponent extends ComponentBase<ListViewState> {
         }
     }
 
-    onChildGrowChanged(): void {
+    onChildLayoutChanged(): void {
         this.updateChildStyles();
         this.updateIsSelected();
 
@@ -104,6 +105,8 @@ export class ListViewComponent extends ComponentBase<ListViewState> {
         for (let [index, childId] of this.state.children.entries()) {
             let childComponent = componentsById[childId]!;
             let childWrapper = this.element.children[index] as HTMLElement;
+
+            applyMaxOuterSize(childWrapper, childComponent, 1);
 
             if (childComponent.state._grow_[1]) {
                 hasGrowers = true;

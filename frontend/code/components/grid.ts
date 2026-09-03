@@ -72,7 +72,7 @@ export class GridComponent extends ComponentBase<GridState> {
         }
     }
 
-    onChildGrowChanged(): void {
+    onChildLayoutChanged(): void {
         this.updateTrackSizes(
             this.state._children,
             this.state._child_positions

@@ -10,7 +10,12 @@ import {
     OnlyResizeObserver,
     zip,
 } from "../utils";
-import { ComponentBase, ComponentState, DeltaState } from "./componentBase";
+import {
+    ComponentBase,
+    ComponentState,
+    DeltaState,
+    applyMaxOuterSize,
+} from "./componentBase";
 
 export type LinearContainerState = ComponentState & {
     _type_: "Row-builtin" | "Column-builtin";
@@ -145,6 +150,8 @@ export abstract class LinearContainer extends ComponentBase<LinearContainerState
         ) {
             Object.assign(this.state, deltaState);
 
+            this.updateChildMaxSizes();
+
             if (this.state.proportions === null) {
                 this.updateChildGrows();
             } else {
@@ -165,9 +172,24 @@ export abstract class LinearContainer extends ComponentBase<LinearContainerState
         }
     }
 
-    onChildGrowChanged(): void {
+    onChildLayoutChanged(): void {
+        this.updateChildMaxSizes();
+
         if (this.state.proportions === null) {
             this.updateChildGrows();
+        }
+    }
+
+    /// Caps each child's wrapper at the child's maximum size. The flexbox then
+    /// hands the space that child can't use to its siblings.
+    private updateChildMaxSizes(): void {
+        for (let [index, childId] of this.state.children.entries()) {
+            let childComponent = componentsById[childId]!;
+            let childWrapper = this.childContainer.children[
+                index
+            ] as HTMLElement;
+
+            applyMaxOuterSize(childWrapper, childComponent, this.index);
         }
     }
 

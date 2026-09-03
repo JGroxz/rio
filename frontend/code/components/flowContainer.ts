@@ -3,7 +3,12 @@ import {
     ComponentStatesUpdateContext,
 } from "../componentManagement";
 import { ComponentId } from "../dataModels";
-import { ComponentBase, ComponentState, DeltaState } from "./componentBase";
+import {
+    ComponentBase,
+    ComponentState,
+    DeltaState,
+    applyMaxOuterSize,
+} from "./componentBase";
 
 export type FlowState = ComponentState & {
     _type_: "FlowContainer-builtin";
@@ -65,7 +70,7 @@ export class FlowComponent extends ComponentBase<FlowState> {
         }
     }
 
-    onChildGrowChanged(): void {
+    onChildLayoutChanged(): void {
         this.updateChildGrows(this.state.children, this.state.justify);
     }
 
@@ -75,6 +80,8 @@ export class FlowComponent extends ComponentBase<FlowState> {
         for (let [index, childId] of children.entries()) {
             let childComponent = componentsById[childId]!;
             let childWrapper = this.innerElement.children[index] as HTMLElement;
+
+            applyMaxOuterSize(childWrapper, childComponent, 0);
 
             if (childComponent.state._grow_[0]) {
                 hasGrowers = true;

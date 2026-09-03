@@ -39,7 +39,7 @@ export type ComponentState = {
     // Explicit size request, if any
     _min_size_: [number, number];
     // Maximum size, if any
-    // MAX-SIZE-BRANCH _max_size_?: [number | null, number | null];
+    _max_size_: [number | null, number | null];
     // Alignment of the component within its parent, if any
     _align_: [number | null, number | null];
     // Scrolling behavior
@@ -135,12 +135,15 @@ export abstract class ComponentBase<S extends ComponentState = ComponentState> {
             this.element.style.minHeight = `${deltaState._min_size_[1]}rem`;
         }
 
-        // MAX-SIZE-BRANCH if (deltaState._max_size_ !== undefined) {
-        // MAX-SIZE-BRANCH     this._updateMaxSize(deltaState._max_size_);
-        // MAX-SIZE-BRANCH }
-
-        if (deltaState._align_ !== undefined) {
-            this._updateAlign(deltaState._align_);
+        // Alignment and maximum size share the same helper elements
+        if (
+            deltaState._align_ !== undefined ||
+            deltaState._max_size_ !== undefined
+        ) {
+            this._updateAlignAndMaxSize(
+                deltaState._align_ ?? this.state._align_,
+                deltaState._max_size_ ?? this.state._max_size_
+            );
         }
 
         // SCROLLING-REWORK
@@ -176,7 +179,7 @@ export abstract class ComponentBase<S extends ComponentState = ComponentState> {
         }
     }
 
-    onChildGrowChanged(): void {}
+    onChildLayoutChanged(): void {}
 
     private _onSizeChange(): void {
         let width = getAllocatedWidthInPx(this.element);
@@ -189,32 +192,48 @@ export abstract class ComponentBase<S extends ComponentState = ComponentState> {
         });
     }
 
-    private _updateMaxSize(maxSize: [number | null, number | null]): void {
-        let transform: string[] = [];
+    /// Alignment and maximum size are both about a component not filling the
+    /// space its parent handed down. They share two helper elements: The outer
+    /// one takes up all of the space, the inner one holds the component and is
+    /// placed inside of it.
+    ///
+    /// Along each axis the inner element does one of four things:
+    ///
+    /// - No alignment, no maximum: stretches.
+    /// - Alignment only: hugs its content and is offset by the alignment.
+    /// - Maximum only: stretches up to the maximum and is centered in the
+    ///   leftover.
+    /// - Alignment and maximum: stretches up to the maximum and is positioned
+    ///   in the leftover by the alignment. This matches CSS `max-width` with
+    ///   margins, Compose's `fillMaxWidth().widthIn(max = ...)` and SwiftUI's
+    ///   `.frame(maxWidth: ...)`.
+    ///
+    /// Without a maximum this is the classic mechanism using `left`/`top` and
+    /// a transform. With one the outer element becomes a 3x3 grid instead,
+    /// the inner element sitting in the middle cell: a capped axis gets a
+    /// middle track between `min-content` and the maximum, which fills up to
+    /// the maximum before the two `fr` tracks around it split the leftover by
+    /// the alignment, and an aligned but uncapped axis gets `min-content`.
+    /// Deliberately no transform: a transformed ancestor becomes the
+    /// containing block of `position: fixed` descendants, and maximum sizes
+    /// tend to sit on large containers with popups inside.
+    ///
+    /// A maximum never pushes a component below its natural size, matching
+    /// the rest of Rio: `min-content` is the floor in both axes. For that
+    /// floor to be measurable the child must not be stretched with a
+    /// percentage (it would resolve against the clamped wrapper), so with a
+    /// maximum in play the inner element stretches its child as a flexbox.
+    private _updateAlignAndMaxSize(
+        align: [number | null, number | null],
+        maxSize: [number | null, number | null]
+    ): void {
+        let needsHelperElements =
+            align[0] !== null ||
+            align[1] !== null ||
+            maxSize[0] !== null ||
+            maxSize[1] !== null;
 
-        if (maxSize[0] === null) {
-            this.element.style.removeProperty("max-width");
-            this.element.style.removeProperty("left");
-        } else {
-            this.element.style.maxWidth = `${maxSize[0]}rem`;
-            this.element.style.left = `50%`;
-            transform.push("translateX(-50%)");
-        }
-
-        if (maxSize[1] === null) {
-            this.element.style.removeProperty("max-height");
-            this.element.style.removeProperty("top");
-        } else {
-            this.element.style.maxHeight = `${maxSize[1]}rem`;
-            this.element.style.top = `50%`;
-            transform.push("translateY(-50%)");
-        }
-
-        this.element.style.transform = transform.join(" ");
-    }
-
-    private _updateAlign(align: [number | null, number | null]): void {
-        if (align[0] === null && align[1] === null) {
+        if (!needsHelperElements) {
             // Remove the alignElement if we have one
             if (this.outerAlignElement !== null) {
                 replaceElement(
@@ -224,46 +243,110 @@ export abstract class ComponentBase<S extends ComponentState = ComponentState> {
                 this.outerAlignElement = null;
                 this.innerAlignElement = null;
             }
-        } else {
-            // Create the alignElement if we don't have one already
-            if (this.outerAlignElement === null) {
-                this.innerAlignElement = insertWrapperElement(this.element);
-                this.outerAlignElement = insertWrapperElement(
-                    this.innerAlignElement
-                );
 
-                this.innerAlignElement.classList.add("rio-align-inner");
-                this.outerAlignElement.classList.add("rio-align-outer");
-
-                this.outerAlignElement.dataset.ownerId = `${this.id}`;
-            }
-
-            let transform = "";
-
-            if (align[0] === null) {
-                this.innerAlignElement!.style.removeProperty("left");
-                this.innerAlignElement!.style.width = "100%";
-                this.innerAlignElement!.classList.add("stretch-child-x");
-            } else {
-                this.innerAlignElement!.style.left = `${align[0] * 100}%`;
-                this.innerAlignElement!.style.width = "min-content";
-                this.innerAlignElement!.classList.remove("stretch-child-x");
-                transform += `translateX(-${align[0] * 100}%) `;
-            }
-
-            if (align[1] === null) {
-                this.innerAlignElement!.style.removeProperty("top");
-                this.innerAlignElement!.style.height = "100%";
-                this.innerAlignElement!.classList.add("stretch-child-y");
-            } else {
-                this.innerAlignElement!.style.top = `${align[1] * 100}%`;
-                this.innerAlignElement!.style.height = "min-content";
-                this.innerAlignElement!.classList.remove("stretch-child-y");
-                transform += `translateY(-${align[1] * 100}%) `;
-            }
-
-            this.innerAlignElement!.style.transform = transform;
+            return;
         }
+
+        // Create the alignElement if we don't have one already
+        if (this.outerAlignElement === null) {
+            this.innerAlignElement = insertWrapperElement(this.element);
+            this.outerAlignElement = insertWrapperElement(
+                this.innerAlignElement
+            );
+
+            this.innerAlignElement.classList.add("rio-align-inner");
+            this.outerAlignElement.classList.add("rio-align-outer");
+
+            this.outerAlignElement.dataset.ownerId = `${this.id}`;
+        }
+
+        let outer = this.outerAlignElement!;
+        let inner = this.innerAlignElement!;
+        let hasMax = maxSize[0] !== null || maxSize[1] !== null;
+
+        outer.classList.toggle("rio-align-outer-grid", hasMax);
+        inner.classList.toggle("rio-align-inner-flex", hasMax);
+
+        if (hasMax) {
+            outer.style.gridTemplateColumns = ComponentBase._alignmentTracks(
+                align[0],
+                maxSize[0]
+            );
+            outer.style.gridTemplateRows = ComponentBase._alignmentTracks(
+                align[1],
+                maxSize[1]
+            );
+
+            // The grid does all of the sizing and placing
+            for (let property of [
+                "left",
+                "top",
+                "width",
+                "height",
+                "transform",
+            ]) {
+                inner.style.removeProperty(property);
+            }
+            inner.classList.remove("stretch-child-x", "stretch-child-y");
+            return;
+        }
+
+        // No maximum: classic alignment
+        outer.style.removeProperty("grid-template-columns");
+        outer.style.removeProperty("grid-template-rows");
+
+        let transform = "";
+
+        // Horizontal
+        if (align[0] === null) {
+            inner.style.removeProperty("left");
+            inner.style.width = "100%";
+            inner.classList.add("stretch-child-x");
+        } else {
+            inner.style.left = `${align[0] * 100}%`;
+            inner.style.width = "min-content";
+            inner.classList.remove("stretch-child-x");
+            transform += `translateX(-${align[0] * 100}%) `;
+        }
+
+        // Vertical
+        if (align[1] === null) {
+            inner.style.removeProperty("top");
+            inner.style.height = "100%";
+            inner.classList.add("stretch-child-y");
+        } else {
+            inner.style.top = `${align[1] * 100}%`;
+            inner.style.height = "min-content";
+            inner.classList.remove("stretch-child-y");
+            transform += `translateY(-${align[1] * 100}%) `;
+        }
+
+        inner.style.transform = transform;
+    }
+
+    /// The grid tracks along one axis of the outer alignment element: a
+    /// leading and a trailing `fr` track split the leftover by the alignment,
+    /// the middle one holds the inner element.
+    ///
+    /// The cap is `min(100%, max)` rather than just the maximum: while the
+    /// outer element's size is being measured (e.g. its natural height) the
+    /// percentage can't resolve, the track then counts as `auto`, and the
+    /// natural size stays the content's, not the maximum.
+    private static _alignmentTracks(
+        align: number | null,
+        maxSize: number | null
+    ): string {
+        if (maxSize !== null) {
+            let position = align ?? 0.5;
+            let track = `minmax(min-content, min(100%, ${maxSize}rem))`;
+            return `${position}fr ${track} ${1 - position}fr`;
+        }
+
+        if (align !== null) {
+            return `${align}fr min-content ${1 - align}fr`;
+        }
+
+        return "0 1fr 0";
     }
 
     // SCROLLING-REWORK
@@ -677,4 +760,33 @@ function* iterChildElements(parentElement: Element) {
         yield element;
     }
     return null; // Return instead of yield to shut up the type checker
+}
+
+/// Caps a wrapper element a parent owns at the child's maximum outer size
+/// (i.e. including margins), so that e.g. a flexbox hands the space this
+/// component can't use to its siblings. The wrapper also gets a `min-content`
+/// floor: a maximum never pushes a component below its natural size.
+export function applyMaxOuterSize(
+    wrapper: HTMLElement,
+    component: ComponentBase,
+    axis: 0 | 1
+): void {
+    let sizeAttribute = axis === 0 ? "width" : "height";
+    let maxSize = component.state._max_size_[axis];
+
+    if (maxSize === null) {
+        wrapper.style.removeProperty(`max-${sizeAttribute}`);
+        wrapper.style.removeProperty(`min-${sizeAttribute}`);
+        return;
+    }
+
+    let margin = component.state._margin_;
+    let totalMargin =
+        axis === 0 ? margin[0] + margin[2] : margin[1] + margin[3];
+
+    wrapper.style.setProperty(
+        `max-${sizeAttribute}`,
+        `${maxSize + totalMargin}rem`
+    );
+    wrapper.style.setProperty(`min-${sizeAttribute}`, "min-content");
 }

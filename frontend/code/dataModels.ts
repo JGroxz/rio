@@ -145,8 +145,8 @@ export type ComponentLayout = {
     naturalHeight: number;
 
     /// Components can request more space than their natural size if a size was
-    /// explicitly provided on the Python-side. This value is the maximum of the
-    /// natural size and any explicitly provided size.
+    /// explicitly provided on the Python-side. This value is the natural size,
+    /// clamped to the explicitly provided minimum and maximum.
     requestedInnerWidth: number;
     requestedInnerHeight: number;
 

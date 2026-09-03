@@ -95,6 +95,28 @@
     @include utils.shared-component-style();
 }
 
+// With a maximum the inner element is sized and placed by a grid instead of a
+// transform, see `_updateAlignAndMaxSize`
+.rio-align-outer-grid {
+    display: grid;
+
+    & > .rio-align-inner {
+        grid-area: 2 / 2;
+    }
+}
+
+// With a maximum the child is stretched by flexbox rather than by a
+// percentage, which would resolve against the clamped wrapper and defeat the
+// `min-content` floor, see `_updateAlignAndMaxSize`
+.rio-align-inner-flex {
+    display: flex;
+    flex-direction: column;
+
+    & > * {
+        flex: 1 1 auto;
+    }
+}
+
 .rio-align-inner {
     position: relative;
 
