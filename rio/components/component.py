@@ -276,6 +276,45 @@ class Component(abc.ABC, metaclass=ComponentMeta):
         Sizes are measured in "font heights", so a width of 1 is the same as the
         height of a single line of text.
 
+    `max_width`: The maximum amount of horizontal space this component will
+        take up. The component will never be wider than this, even if its
+        parent offers more space. It also never gets narrower than its natural
+        width: like every component in Rio, it is never smaller than its
+        content. To make a component narrower, reduce its natural width, e.g.
+        by letting text wrap.
+
+        Containers which distribute space between several children (such as
+        `rio.Row`) hand the leftover space to the other children. If nobody can
+        use it, or if the parent passes on all of its space regardless, the
+        component is positioned inside the leftover space using `align_x`
+        (0 for left, 1 for right), and centered without one. An alignment
+        doesn't shrink the component to its natural size here: it still fills
+        the space up to its maximum. This matches CSS `max-width` with auto
+        margins, Compose's `fillMaxWidth().widthIn(max = ...)` and SwiftUI's
+        `.frame(maxWidth: ...)`.
+
+        Sizes are measured in "font heights", so a width of 1 is the same as the
+        height of a single line of text.
+
+    `max_height`: The maximum amount of vertical space this component will
+        take up. The component will never be taller than this, even if its
+        parent offers more space. It also never gets shorter than its natural
+        height: like every component in Rio, it is never smaller than its
+        content.
+
+        Containers which distribute space between several children (such as
+        `rio.Column`) hand the leftover space to the other children. If nobody
+        can use it, or if the parent passes on all of its space regardless, the
+        component is positioned inside the leftover space using `align_y`
+        (0 for top, 1 for bottom), and centered without one. An alignment
+        doesn't shrink the component to its natural size here: it still fills
+        the space up to its maximum. This matches CSS `max-height` with auto
+        margins, Compose's `fillMaxHeight().heightIn(max = ...)` and SwiftUI's
+        `.frame(maxHeight: ...)`.
+
+        Sizes are measured in "font heights", so a width of 1 is the same as the
+        height of a single line of text.
+
     `grow_x`: Whether this component should request all the superfluous
         horizontal space available in its parent. Containers normally divide up
         any extra space evenly between their children. However, if components
@@ -291,12 +330,16 @@ class Component(abc.ABC, metaclass=ComponentMeta):
     `align_x`: How this component should be aligned horizontally, if it
         receives more space than it requested. This can be a number between 0
         and 1, where 0 means left-aligned, 0.5 means centered, and 1 means
-        right-aligned.
+        right-aligned. The component only takes up the width it needs, unless
+        it has a `max_width`: then it fills the space up to that maximum, and
+        the alignment positions it in whatever is left.
 
     `align_y`: How this component should be aligned vertically, if it receives
         more space than it requested. This can be a number between 0 and 1,
         where 0 means top-aligned, 0.5 means centered, and 1 means
-        bottom-aligned.
+        bottom-aligned. The component only takes up the height it needs,
+        unless it has a `max_height`: then it fills the space up to that
+        maximum, and the alignment positions it in whatever is left.
 
     `accessibility_role`: Describes the component's role or purpose. This can
         help screen readers and other assistive technologies to better
@@ -314,8 +357,8 @@ class Component(abc.ABC, metaclass=ComponentMeta):
     min_width: float = 0
     min_height: float = 0
 
-    # MAX-SIZE-BRANCH max_width: float | None = None
-    # MAX-SIZE-BRANCH max_height: float | None = None
+    max_width: float | None = None
+    max_height: float | None = None
 
     grow_x: bool = False
     grow_y: bool = False
