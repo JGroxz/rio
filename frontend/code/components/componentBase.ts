@@ -722,31 +722,43 @@ function* iterChildElements(parentElement: Element) {
     return null; // Return instead of yield to shut up the type checker
 }
 
-/// Caps a wrapper element a parent owns at the child's maximum outer size
-/// (i.e. including margins), so that e.g. a flexbox hands the space this
-/// component can't use to its siblings. The wrapper also gets a `min-content`
-/// floor: a maximum never pushes a component below its natural size.
-export function applyMaxOuterSize(
-    wrapper: HTMLElement,
+/// The component's maximum outer size (i.e. including margins) along the
+/// given axis, in rem. `null` if it has none.
+export function getMaxOuterSize(
     component: ComponentBase,
     axis: 0 | 1
-): void {
-    let sizeAttribute = axis === 0 ? "width" : "height";
+): number | null {
     let maxSize = component.state._max_size_[axis];
 
     if (maxSize === null) {
-        wrapper.style.removeProperty(`max-${sizeAttribute}`);
-        wrapper.style.removeProperty(`min-${sizeAttribute}`);
-        return;
+        return null;
     }
 
     let margin = component.state._margin_;
     let totalMargin =
         axis === 0 ? margin[0] + margin[2] : margin[1] + margin[3];
 
-    wrapper.style.setProperty(
-        `max-${sizeAttribute}`,
-        `${maxSize + totalMargin}rem`
-    );
+    return maxSize + totalMargin;
+}
+
+/// Caps a wrapper element a parent owns at the child's maximum outer size, so
+/// that e.g. a flexbox hands the space this component can't use to its
+/// siblings. The wrapper also gets a `min-content` floor: a maximum never
+/// pushes a component below its natural size.
+export function applyMaxOuterSize(
+    wrapper: HTMLElement,
+    component: ComponentBase,
+    axis: 0 | 1
+): void {
+    let sizeAttribute = axis === 0 ? "width" : "height";
+    let maxOuterSize = getMaxOuterSize(component, axis);
+
+    if (maxOuterSize === null) {
+        wrapper.style.removeProperty(`max-${sizeAttribute}`);
+        wrapper.style.removeProperty(`min-${sizeAttribute}`);
+        return;
+    }
+
+    wrapper.style.setProperty(`max-${sizeAttribute}`, `${maxOuterSize}rem`);
     wrapper.style.setProperty(`min-${sizeAttribute}`, "min-content");
 }

@@ -4,7 +4,12 @@ import {
 } from "../componentManagement";
 import { ComponentId } from "../dataModels";
 import { range, zip } from "../utils";
-import { ComponentBase, ComponentState, DeltaState } from "./componentBase";
+import {
+    ComponentBase,
+    ComponentState,
+    DeltaState,
+    getMaxOuterSize,
+} from "./componentBase";
 
 type GridChildPosition = {
     row: number;
@@ -158,34 +163,60 @@ export class GridComponent extends ComponentBase<GridState> {
             }
         }
 
-        const GROW = "auto";
         const NO_GROW = "min-content";
 
+        // A growing track stops once every child in it has reached its
+        // maximum. `minmax(auto, cap)` grows up to the cap and hands the rest
+        // to the other `auto` tracks; the `auto` minimum keeps the natural
+        // size as the floor.
+        let grow = (cap: number | null) =>
+            cap === null ? "auto" : `minmax(auto, ${cap}rem)`;
+
+        let columnCaps = trackCaps(childrenWithPositions, 0, nColumns);
+        let rowCaps = trackCaps(childrenWithPositions, 1, nRows);
+
         let columnWidths: string[] = [];
-        if (growingColumns.size === 0) {
+        for (let i = 0; i < nColumns; i++) {
             // If nobody wants to grow, all of them do
-            for (let i = 0; i < nColumns; i++) {
-                columnWidths.push(GROW);
-            }
-        } else {
-            for (let i = 0; i < nColumns; i++) {
-                columnWidths.push(growingColumns.has(i) ? GROW : NO_GROW);
-            }
+            let grows = growingColumns.size === 0 || growingColumns.has(i);
+            columnWidths.push(grows ? grow(columnCaps[i]) : NO_GROW);
         }
 
         let rowHeights: string[] = [];
-        if (growingRows.size === 0) {
-            // If nobody wants to grow, all of them do
-            for (let i = 0; i < nRows; i++) {
-                rowHeights.push(GROW);
-            }
-        } else {
-            for (let i = 0; i < nRows; i++) {
-                rowHeights.push(growingRows.has(i) ? GROW : NO_GROW);
-            }
+        for (let i = 0; i < nRows; i++) {
+            let grows = growingRows.size === 0 || growingRows.has(i);
+            rowHeights.push(grows ? grow(rowCaps[i]) : NO_GROW);
         }
 
         this.element.style.gridTemplateColumns = columnWidths.join(" ");
         this.element.style.gridTemplateRows = rowHeights.join(" ");
     }
+}
+
+/// Per track, the largest maximum outer size among the children placed in it,
+/// or `null` if the track can't be capped: some child there has no maximum,
+/// or spans several tracks (CSS can't cap the sum of tracks).
+function trackCaps(
+    children: [ComponentBase, GridChildPosition][],
+    axis: 0 | 1,
+    nTracks: number
+): (number | null)[] {
+    let caps: (number | null)[] = new Array(nTracks).fill(null);
+    let uncappable: boolean[] = new Array(nTracks).fill(false);
+
+    for (let [childComponent, childPosition] of children) {
+        let start = axis === 0 ? childPosition.column : childPosition.row;
+        let span = axis === 0 ? childPosition.width : childPosition.height;
+        let cap = getMaxOuterSize(childComponent, axis);
+
+        for (let track of range(start, start + span)) {
+            if (cap === null || span !== 1) {
+                uncappable[track] = true;
+            } else {
+                caps[track] = Math.max(caps[track] ?? 0, cap);
+            }
+        }
+    }
+
+    return caps.map((cap, track) => (uncappable[track] ? null : cap));
 }

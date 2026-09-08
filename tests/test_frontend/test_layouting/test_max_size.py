@@ -315,3 +315,57 @@ async def test_max_size_on_minor_axis_is_centered() -> None:
         row.top_in_viewport_inner + (row.allocated_inner_height - 3) / 2,
         abs=0.2,
     )
+
+
+async def test_grid_capped_column_yields_to_sibling_column() -> None:
+    """
+    A growing column whose only child is capped stops at the cap. The other
+    growing column receives the rest.
+    """
+
+    def build() -> rio.Component:
+        grid = rio.Grid(key="grid")
+        grid.add(
+            rio.Text("capped", key="capped", max_width=10, grow_x=True),
+            row=0,
+            column=0,
+        )
+        grid.add(rio.Text("grower", key="grower", grow_x=True), row=0, column=1)
+        return grid
+
+    layouter = await verify_layout(build)
+
+    grid = layouter.get_layout_by_key("grid")
+    capped = layouter.get_layout_by_key("capped")
+    grower = layouter.get_layout_by_key("grower")
+
+    assert capped.allocated_outer_width == pytest.approx(10, abs=0.2)
+    assert grower.allocated_outer_width == pytest.approx(
+        grid.allocated_inner_width - 10, abs=0.2
+    )
+
+
+async def test_grid_spanning_child_keeps_its_columns_uncapped() -> None:
+    def build() -> rio.Component:
+        grid = rio.Grid(key="grid")
+        grid.add(
+            rio.Text("wide", key="wide", max_width=10, grow_x=True),
+            row=0,
+            column=0,
+            width=2,
+        )
+        grid.add(rio.Text("a", key="a", grow_x=True), row=1, column=0)
+        grid.add(rio.Text("b", key="b", grow_x=True), row=1, column=1)
+        return grid
+
+    layouter = await verify_layout(build)
+
+    grid = layouter.get_layout_by_key("grid")
+    wide = layouter.get_layout_by_key("wide")
+
+    # Two columns can't be capped as a sum, so they keep growing; the child
+    # is centered inside the full width instead
+    assert wide.allocated_outer_width == pytest.approx(
+        grid.allocated_inner_width, abs=0.2
+    )
+    assert wide.allocated_inner_width == pytest.approx(10, abs=0.2)

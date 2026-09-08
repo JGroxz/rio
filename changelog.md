@@ -9,6 +9,8 @@
   containers such as `rio.Row` hand the leftover space to the other children,
   and where nobody can use it the component is positioned by its alignment
   (centered by default)
+- `rio.Grid` columns and rows stop growing once every child in them has reached
+  its maximum size, handing the rest to the other tracks
 
 ### Breaking
 
