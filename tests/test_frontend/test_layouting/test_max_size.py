@@ -317,6 +317,118 @@ async def test_max_size_on_minor_axis_is_centered() -> None:
     )
 
 
+async def test_lone_capped_grower_takes_everything_below_its_cap() -> None:
+    """
+    A `Row` with a single capped grower: below the cap the child gets the full
+    width, above it the child stops and the leftover stays at the end. This
+    is how a left-anchored, width-limited column is expressed.
+    """
+    layouter = await verify_layout(
+        lambda: rio.Container(
+            rio.Row(
+                rio.Text("hi", key="narrow", max_width=60, grow_x=True),
+                key="narrow_row",
+            ),
+            min_width=40,
+            align_x=0,
+        )
+    )
+
+    row = layouter.get_layout_by_key("narrow_row")
+    child = layouter.get_layout_by_key("narrow")
+
+    assert row.allocated_inner_width == pytest.approx(40, abs=0.2)
+    assert child.allocated_outer_width == pytest.approx(40, abs=0.2)
+    assert child.left_in_viewport_outer == pytest.approx(
+        row.left_in_viewport_inner, abs=0.2
+    )
+
+    layouter = await verify_layout(
+        lambda: rio.Row(
+            rio.Text("hi", key="wide", max_width=10, grow_x=True),
+            key="wide_row",
+        )
+    )
+
+    row = layouter.get_layout_by_key("wide_row")
+    child = layouter.get_layout_by_key("wide")
+
+    assert row.allocated_inner_width > 10
+    assert child.allocated_outer_width == pytest.approx(10, abs=0.2)
+    assert child.left_in_viewport_outer == pytest.approx(
+        row.left_in_viewport_inner, abs=0.2
+    )
+
+
+@pytest.mark.parametrize("justify", ["left", "center", "right"])
+async def test_row_justify_places_capped_children(justify: str) -> None:
+    """
+    Once every child has stopped growing, `justify` decides where they go.
+    """
+    layouter = await verify_layout(
+        lambda: rio.Row(
+            rio.Text("hi", key="child", max_width=10, grow_x=True),
+            key="row",
+            justify=justify,  # type: ignore[arg-type]
+        )
+    )
+
+    row = layouter.get_layout_by_key("row")
+    child = layouter.get_layout_by_key("child")
+    leftover = row.allocated_inner_width - 10
+    assert leftover > 0
+
+    expected_left = {
+        "left": row.left_in_viewport_inner,
+        "center": row.left_in_viewport_inner + leftover / 2,
+        "right": row.left_in_viewport_inner + leftover,
+    }[justify]
+
+    assert child.allocated_outer_width == pytest.approx(10, abs=0.2)
+    assert child.left_in_viewport_outer == pytest.approx(expected_left, abs=0.2)
+
+
+async def test_column_justify_bottom() -> None:
+    layouter = await verify_layout(
+        lambda: rio.Column(
+            rio.Text("hi", key="child", max_height=5, grow_y=True),
+            key="column",
+            justify="bottom",
+        )
+    )
+
+    column = layouter.get_layout_by_key("column")
+    child = layouter.get_layout_by_key("child")
+
+    assert child.allocated_outer_height == pytest.approx(5, abs=0.2)
+    assert child.top_in_viewport_outer == pytest.approx(
+        column.top_in_viewport_inner + column.allocated_inner_height - 5,
+        abs=0.2,
+    )
+
+
+async def test_justify_is_inert_while_a_child_grows() -> None:
+    layouter = await verify_layout(
+        lambda: rio.Row(
+            rio.Text("capped", key="capped", max_width=10, grow_x=True),
+            rio.Text("grower", key="grower", grow_x=True),
+            key="row",
+            justify="right",
+        )
+    )
+
+    row = layouter.get_layout_by_key("row")
+    capped = layouter.get_layout_by_key("capped")
+    grower = layouter.get_layout_by_key("grower")
+
+    assert capped.left_in_viewport_outer == pytest.approx(
+        row.left_in_viewport_inner, abs=0.2
+    )
+    assert grower.allocated_outer_width == pytest.approx(
+        row.allocated_inner_width - 10, abs=0.2
+    )
+
+
 async def test_grid_capped_column_yields_to_sibling_column() -> None:
     """
     A growing column whose only child is capped stops at the cap. The other
@@ -369,3 +481,60 @@ async def test_grid_spanning_child_keeps_its_columns_uncapped() -> None:
         grid.allocated_inner_width, abs=0.2
     )
     assert wide.allocated_inner_width == pytest.approx(10, abs=0.2)
+
+
+async def test_grid_justify_places_capped_columns() -> None:
+    def build() -> rio.Component:
+        grid = rio.Grid(key="grid", justify_x="right", justify_y="bottom")
+        grid.add(
+            rio.Text(
+                "capped",
+                key="capped",
+                max_width=10,
+                max_height=5,
+                grow_x=True,
+                grow_y=True,
+            ),
+            row=0,
+            column=0,
+        )
+        return grid
+
+    layouter = await verify_layout(build)
+
+    grid = layouter.get_layout_by_key("grid")
+    capped = layouter.get_layout_by_key("capped")
+
+    assert capped.allocated_outer_width == pytest.approx(10, abs=0.2)
+    assert capped.left_in_viewport_outer + 10 == pytest.approx(
+        grid.left_in_viewport_inner + grid.allocated_inner_width, abs=0.2
+    )
+    assert capped.allocated_outer_height == pytest.approx(5, abs=0.2)
+    assert capped.top_in_viewport_outer + 5 == pytest.approx(
+        grid.top_in_viewport_inner + grid.allocated_inner_height, abs=0.2
+    )
+
+
+async def test_grid_justify_is_inert_while_a_column_grows() -> None:
+    def build() -> rio.Component:
+        grid = rio.Grid(key="grid", justify_x="right")
+        grid.add(
+            rio.Text("capped", key="capped", max_width=10, grow_x=True),
+            row=0,
+            column=0,
+        )
+        grid.add(rio.Text("grower", key="grower", grow_x=True), row=0, column=1)
+        return grid
+
+    layouter = await verify_layout(build)
+
+    grid = layouter.get_layout_by_key("grid")
+    capped = layouter.get_layout_by_key("capped")
+    grower = layouter.get_layout_by_key("grower")
+
+    assert capped.left_in_viewport_outer == pytest.approx(
+        grid.left_in_viewport_inner, abs=0.2
+    )
+    assert grower.allocated_outer_width == pytest.approx(
+        grid.allocated_inner_width - 10, abs=0.2
+    )

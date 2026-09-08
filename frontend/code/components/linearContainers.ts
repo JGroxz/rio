@@ -22,7 +22,17 @@ export type LinearContainerState = ComponentState & {
     children: ComponentId[];
     spacing: number;
     proportions: "homogeneous" | number[] | null;
+    justify: "left" | "center" | "right" | "top" | "bottom";
 };
+
+// Where the children go when none of them can take the leftover space
+const JUSTIFY_TO_CSS = {
+    left: "flex-start",
+    top: "flex-start",
+    center: "center",
+    right: "flex-end",
+    bottom: "flex-end",
+} as const;
 
 // The size of the invisible spacer element. It must be large enough to account
 // for small inaccuracies in the child elements' sizes. (For example, if the
@@ -102,6 +112,13 @@ export abstract class LinearContainer extends ComponentBase<LinearContainerState
         // Spacing
         if (deltaState.spacing !== undefined) {
             this.childContainer.style.gap = `${deltaState.spacing}rem`;
+        }
+
+        // Justify. Only matters once every child has stopped growing;
+        // otherwise the flexbox has no leftover to place.
+        if (deltaState.justify !== undefined) {
+            this.childContainer.style.justifyContent =
+                JUSTIFY_TO_CSS[deltaState.justify];
         }
 
         // Proportions

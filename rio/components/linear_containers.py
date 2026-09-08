@@ -20,6 +20,9 @@ class _LinearContainer(FundamentalComponent):
     children: list[rio.Component]
     spacing: float = 0.0
     proportions: t.Literal["homogeneous"] | t.Sequence[float] | None = None
+    # Where the children go when none of them can take the leftover space.
+    # `Row` uses left/center/right, `Column` top/center/bottom.
+    justify: t.Literal["left", "center", "right", "top", "bottom"] = "left"
 
     # Don't let @dataclass generate a constructor
     def __init__(self, *args, **kwargs) -> None:
@@ -61,6 +64,13 @@ class Row(_LinearContainer):
     other than `None`, which will cause the `Row` to only take up as much space
     as necessary and position itself in the available space.
 
+    Children with a `max_width` stop growing once they reach it, and the space
+    they can't use goes to the other growing children. If every child has
+    stopped, the `justify` attribute decides where the children go inside the
+    leftover. A single growing child with a `max_width` is therefore a column
+    that fills the `Row` on narrow screens and stops at its maximum on wide
+    ones, anchored wherever `justify` says.
+
     For more details, see the [layouting
     quickstart](https://rio-ui.dev/docs/howto/layout-guide).
 
@@ -92,6 +102,13 @@ class Row(_LinearContainer):
         - A list of floats: Each child will grow according to its proportion.
         - `None`: Extra space will be evenly distributed among children with
             `width='grow'`.
+
+    `justify`: Where the children go when none of them can take the leftover
+        space, i.e. when every child has reached its `max_width`. One of
+        `"left"`, `"center"` or `"right"`. Has no effect while any child is
+        still growing, or while `proportions` are set: proportions always fill
+        the `Row`, and a child's `max_width` then only caps that child, the
+        others share what it leaves.
 
 
     ## Examples
@@ -126,6 +143,7 @@ class Row(_LinearContainer):
         *children: rio.Component,
         spacing: float = 0.0,
         proportions: t.Literal["homogeneous"] | t.Sequence[float] | None = None,
+        justify: t.Literal["left", "center", "right"] = "left",
         key: Key | None = None,
         margin: float | None = None,
         margin_x: float | None = None,
@@ -171,6 +189,7 @@ class Row(_LinearContainer):
         self.children = list(children)
         self.spacing = spacing
         self.proportions = proportions
+        self.justify = justify
 
     def add(self, child: rio.Component) -> te.Self:
         """
@@ -221,6 +240,11 @@ class Column(_LinearContainer):
     other than `None`, which will cause the `Column` to only take up as much
     space as necessary and position itself in the available space.
 
+    Children with a `max_height` stop growing once they reach it, and the space
+    they can't use goes to the other growing children. If every child has
+    stopped, the `justify` attribute decides where the children go inside the
+    leftover.
+
     For more details, see the [layouting
     quickstart](https://rio-ui.dev/docs/howto/layout-guide).
 
@@ -250,6 +274,13 @@ class Column(_LinearContainer):
         - A list of floats: Each child will grow according to its proportion.
         - `None`: Extra space will be evenly distributed among children with
             `height='grow'`.
+
+    `justify`: Where the children go when none of them can take the leftover
+        space, i.e. when every child has reached its `max_height`. One of
+        `"top"`, `"center"` or `"bottom"`. Has no effect while any child is
+        still growing, or while `proportions` are set: proportions always fill
+        the `Column`, and a child's `max_height` then only caps that child,
+        the others share what it leaves.
 
 
     ## Examples
@@ -284,6 +315,7 @@ class Column(_LinearContainer):
         *children: rio.Component,
         spacing: float = 0.0,
         proportions: t.Literal["homogeneous"] | t.Sequence[float] | None = None,
+        justify: t.Literal["top", "center", "bottom"] = "top",
         key: Key | None = None,
         margin: float | None = None,
         margin_x: float | None = None,
@@ -329,6 +361,7 @@ class Column(_LinearContainer):
         self.children = list(children)
         self.spacing = spacing
         self.proportions = proportions
+        self.justify = justify
 
     def add(self, child: rio.Component) -> te.Self:
         """
