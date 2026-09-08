@@ -106,6 +106,15 @@ def _linear_container_get_major_axis_natural_size(
     return result
 
 
+_JUSTIFY_TO_AXIS: dict[str, t.Literal["start", "center", "end"]] = {
+    "left": "start",
+    "top": "start",
+    "center": "center",
+    "right": "end",
+    "bottom": "end",
+}
+
+
 def _distribute_superfluous_space(
     available_space: float,
     base_sizes: list[float],
@@ -163,6 +172,7 @@ def _linear_container_get_major_axis_allocated_sizes(
     child_max_sizes: list[float | None],
     spacing: float,
     proportions: None | t.Literal["homogeneous"] | t.Sequence[float],
+    justify: t.Literal["start", "center", "end"],
 ) -> list[tuple[float, float]]:
     # Allow the code below to assume there is at least one child
     if not child_requested_sizes:
@@ -201,10 +211,18 @@ def _linear_container_get_major_axis_allocated_sizes(
             max_sizes=child_max_sizes,
         )
 
-    # Position the children one after the other. If everyone is capped, the
-    # leftover stays at the end, just like in a flexbox.
+    # Position the children one after the other. If everyone is capped there
+    # is leftover, and `justify` says where the children go inside it.
+    leftover = max(0.0, available_space - sum(sizes))
+
+    if justify == "start":
+        cur_x = 0.0
+    elif justify == "center":
+        cur_x = leftover / 2
+    else:
+        cur_x = leftover
+
     starts_and_sizes: list[tuple[float, float]] = []
-    cur_x = 0
 
     for size in sizes:
         starts_and_sizes.append((cur_x, size))
@@ -743,6 +761,7 @@ class Layouter:
             ],
             spacing=component.spacing,
             proportions=component.proportions,
+            justify=_JUSTIFY_TO_AXIS[component.justify],
         )
 
         for child, (left, width) in zip(direct_children, starts_and_sizes):
@@ -972,6 +991,7 @@ class Layouter:
             ],
             spacing=component.spacing,
             proportions=component.proportions,
+            justify=_JUSTIFY_TO_AXIS[component.justify],
         )
 
         for child, (top, height) in zip(direct_children, starts_and_sizes):

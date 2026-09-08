@@ -54,7 +54,9 @@ class Grid(FundamentalComponent):
     `max_width`; the space it can't use goes to the other growing columns. This
     only works for children occupying a single column, since a child spanning
     several columns can't cap their sum. The same applies to rows and
-    `max_height`.
+    `max_height`. Once every growing column has stopped, `justify_x` decides
+    where the columns go inside the leftover, and `justify_y` does the same
+    for rows.
 
 
     ## Attributes
@@ -62,6 +64,14 @@ class Grid(FundamentalComponent):
     `row_spacing`: The amount of space between rows of the grid.
 
     `column_spacing`: The amount of space between columns of the grid.
+
+    `justify_x`: Where the columns go when none of them can take the leftover
+        horizontal space. One of `"left"`, `"center"` or `"right"`. Has no
+        effect while any column is still growing.
+
+    `justify_y`: Where the rows go when none of them can take the leftover
+        vertical space. One of `"top"`, `"center"` or `"bottom"`. Has no effect
+        while any row is still growing.
 
 
     ## Examples
@@ -106,6 +116,8 @@ class Grid(FundamentalComponent):
     _: dataclasses.KW_ONLY
     row_spacing: float
     column_spacing: float
+    justify_x: t.Literal["left", "center", "right"]
+    justify_y: t.Literal["top", "center", "bottom"]
 
     # Hide internal attributes from the type checker
     if not t.TYPE_CHECKING:
@@ -120,6 +132,8 @@ class Grid(FundamentalComponent):
         *rows: rio.Component | t.Iterable[rio.Component],
         row_spacing: float = 0.0,
         column_spacing: float = 0.0,
+        justify_x: t.Literal["left", "center", "right"] = "left",
+        justify_y: t.Literal["top", "center", "bottom"] = "top",
         key: Key | None = None,
         margin: float | None = None,
         margin_x: float | None = None,
@@ -170,6 +184,8 @@ class Grid(FundamentalComponent):
 
         self.row_spacing = row_spacing
         self.column_spacing = column_spacing
+        self.justify_x = justify_x
+        self.justify_y = justify_y
 
         # JS can only work with lists of Components, so we'll store the
         # components and their positions separately

@@ -24,7 +24,18 @@ export type GridState = ComponentState & {
     _child_positions: GridChildPosition[];
     row_spacing: number;
     column_spacing: number;
+    justify_x: "left" | "center" | "right";
+    justify_y: "top" | "center" | "bottom";
 };
+
+// Where the tracks go when none of them can take the leftover space
+const JUSTIFY_TO_CSS = {
+    left: "start",
+    top: "start",
+    center: "center",
+    right: "end",
+    bottom: "end",
+} as const;
 
 export class GridComponent extends ComponentBase<GridState> {
     createElement(context: ComponentStatesUpdateContext): HTMLElement {
@@ -65,7 +76,12 @@ export class GridComponent extends ComponentBase<GridState> {
                 }`;
             }
 
-            this.updateTrackSizes(deltaState._children, childPositions);
+            this.updateTrackSizes(
+                deltaState._children,
+                childPositions,
+                deltaState.justify_x ?? this.state.justify_x,
+                deltaState.justify_y ?? this.state.justify_y
+            );
         }
 
         if (deltaState.row_spacing !== undefined) {
@@ -74,6 +90,20 @@ export class GridComponent extends ComponentBase<GridState> {
 
         if (deltaState.column_spacing !== undefined) {
             this.element.style.columnGap = `${deltaState.column_spacing}rem`;
+        }
+
+        // Justify is applied by `updateTrackSizes`, since it may only be set
+        // once every growing track is capped
+        if (
+            deltaState.justify_x !== undefined ||
+            deltaState.justify_y !== undefined
+        ) {
+            this.updateTrackSizes(
+                deltaState._children ?? this.state._children,
+                deltaState._child_positions ?? this.state._child_positions,
+                deltaState.justify_x ?? this.state.justify_x,
+                deltaState.justify_y ?? this.state.justify_y
+            );
         }
     }
 
@@ -86,7 +116,9 @@ export class GridComponent extends ComponentBase<GridState> {
 
     updateTrackSizes(
         childIds: ComponentId[],
-        childPositions: GridChildPosition[]
+        childPositions: GridChildPosition[],
+        justifyX: GridState["justify_x"] = this.state.justify_x,
+        justifyY: GridState["justify_y"] = this.state.justify_y
     ): void {
         let childrenWithPositions: [ComponentBase, GridChildPosition][] =
             childIds.map((childId: ComponentId, index: number) => [
@@ -190,6 +222,19 @@ export class GridComponent extends ComponentBase<GridState> {
 
         this.element.style.gridTemplateColumns = columnWidths.join(" ");
         this.element.style.gridTemplateRows = rowHeights.join(" ");
+
+        // Where the tracks go in the leftover. `auto` tracks only stretch
+        // under the default `normal`, so an explicit value is only set once no
+        // track can grow any further.
+        let anyColumnGrows = columnWidths.some((width) => width === "auto");
+        let anyRowGrows = rowHeights.some((height) => height === "auto");
+
+        this.element.style.justifyContent = anyColumnGrows
+            ? ""
+            : JUSTIFY_TO_CSS[justifyX];
+        this.element.style.alignContent = anyRowGrows
+            ? ""
+            : JUSTIFY_TO_CSS[justifyY];
     }
 }
 
