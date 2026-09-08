@@ -10,6 +10,8 @@
   and where nobody can use it the component is positioned by its alignment
   (centered by default). An aligned component with a maximum still fills the
   space up to its maximum, like CSS `max-width` with auto margins
+- `rio.Grid` columns and rows stop growing once every child in them has reached
+  its maximum size, handing the rest to the other tracks
 
 ### Breaking
 

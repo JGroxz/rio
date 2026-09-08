@@ -44,6 +44,19 @@ class Grid(FundamentalComponent):
     rows fill the entire space evenly.
 
 
+    ## Allocation of extra space
+
+    Columns containing a child with `grow_x=True` receive the extra horizontal
+    space, and rows containing a child with `grow_y=True` the vertical one. If
+    no child grows, all tracks share the extra space.
+
+    A growing column stops growing once every child in it has reached its
+    `max_width`; the space it can't use goes to the other growing columns. This
+    only works for children occupying a single column, since a child spanning
+    several columns can't cap their sum. The same applies to rows and
+    `max_height`.
+
+
     ## Attributes
 
     `row_spacing`: The amount of space between rows of the grid.
