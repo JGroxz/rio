@@ -96,6 +96,12 @@ export class OnlyResizeObserver {
     private ignoreNextCall: boolean = true;
     private resizeObserver: ResizeObserver;
 
+    // The size of each element at the time it started being observed. The
+    // first callback is only ignored if none of these have changed since,
+    // because by then the layout may have already moved on (for example if an
+    // ancestor finished its layout in the same frame).
+    private sizesWhenEnabled = new Map<Element, [number, number]>();
+
     constructor(element: Element | Element[], callback: () => void) {
         if (!Array.isArray(element)) {
             element = [element];
@@ -115,6 +121,7 @@ export class OnlyResizeObserver {
     public enable(): void {
         for (let element of this.elements) {
             this.ignoreNextCall = true;
+            this.sizesWhenEnabled.set(element, getElementSize(element));
             this.resizeObserver.observe(element);
         }
     }
@@ -126,11 +133,32 @@ export class OnlyResizeObserver {
     private _callback(): void {
         if (this.ignoreNextCall) {
             this.ignoreNextCall = false;
-            return;
+
+            if (!this._sizeChangedSinceEnabled()) {
+                return;
+            }
         }
 
         this.callback();
     }
+
+    private _sizeChangedSinceEnabled(): boolean {
+        for (let element of this.elements) {
+            let [oldWidth, oldHeight] = this.sizesWhenEnabled.get(element)!;
+            let [newWidth, newHeight] = getElementSize(element);
+
+            if (newWidth !== oldWidth || newHeight !== oldHeight) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+function getElementSize(element: Element): [number, number] {
+    let rect = element.getBoundingClientRect();
+    return [rect.width, rect.height];
 }
 
 export function commitCss(element: HTMLElement): void {

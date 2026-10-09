@@ -16,6 +16,11 @@
 - `rio.Grid` columns and rows stop growing once every child in them has reached
   its maximum size, handing the rest to the other tracks
 
+### Bugfixes
+
+- `rio.Row` and `rio.Column` with `proportions` no longer keep the proportions
+  they calculated before their parent finished resizing them
+
 ### Breaking
 
 - `max_width` and `max_height` are now built-in attributes of `rio.Component`.
