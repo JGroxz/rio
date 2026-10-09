@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Bugfixes
+
+- `rio.Row` and `rio.Column` with `proportions` no longer keep the proportions
+  they calculated before their parent finished resizing them
+
 ## 0.12.3
 
 ### Improvements

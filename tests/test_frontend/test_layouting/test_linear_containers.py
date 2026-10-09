@@ -132,3 +132,25 @@ async def test_linear_container_with_extra_width(
             align_y=0.5,
         )
     )
+
+
+async def test_nested_proportions() -> None:
+    """
+    The inner row calculates its proportions while it's still at its minimum
+    width, before the outer row has handed it its final width. It must notice
+    the resize and recalculate.
+    """
+    await verify_layout(
+        lambda: rio.Row(
+            rio.Row(
+                rio.Text("a"),
+                rio.Text("bbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                proportions=[1, 1],
+            ),
+            rio.Text("x"),
+            proportions=[1, 1],
+            min_width=80,
+            align_x=0.5,
+            align_y=0.5,
+        )
+    )
