@@ -682,3 +682,33 @@ async def test_grid_justify_is_inert_while_a_column_grows() -> None:
     assert grower.allocated_outer_width == pytest.approx(
         grid.allocated_inner_width - 10, abs=0.2
     )
+
+
+async def test_max_width_caps_shrink_to_fit_measurement() -> None:
+    """
+    A shrink-to-fit parent measures the component at its max-content width.
+    The maximum caps that measurement too, not just the laid out width.
+    """
+    async with BrowserClient(
+        lambda: rio.Rectangle(content=rio.Text("hi", max_width=10))
+    ) as client:
+        result = await client.execute_js(
+            """
+            (() => {
+                const inner = document.querySelector(".rio-align-inner");
+                const rem = parseFloat(
+                    getComputedStyle(document.documentElement).fontSize
+                );
+
+                // Plain wrapping text: narrow min-content, wide max-content
+                const wide = document.createElement("div");
+                wide.textContent = "word ".repeat(200);
+                inner.appendChild(wide);
+
+                inner.style.width = "max-content";
+                return inner.getBoundingClientRect().width / rem;
+            })()
+            """
+        )
+
+    assert result == pytest.approx(10, abs=0.2)

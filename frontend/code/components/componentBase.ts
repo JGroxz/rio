@@ -288,12 +288,19 @@ export abstract class ComponentBase<S extends ComponentState = ComponentState> {
                 inner.style.removeProperty(property);
             }
             inner.classList.remove("stretch-child-x", "stretch-child-y");
+
+            // The `min(100%, …)` track doesn't cap what a shrink-to-fit parent
+            // measures, so cap the inner element itself, above its min-content
+            ComponentBase._capInner(inner, "width", maxSize[0]);
+            ComponentBase._capInner(inner, "height", maxSize[1]);
             return;
         }
 
         // No maximum: classic alignment
         outer.style.removeProperty("grid-template-columns");
         outer.style.removeProperty("grid-template-rows");
+        ComponentBase._capInner(inner, "width", null);
+        ComponentBase._capInner(inner, "height", null);
 
         let transform = "";
 
@@ -347,6 +354,22 @@ export abstract class ComponentBase<S extends ComponentState = ComponentState> {
         }
 
         return "0 1fr 0";
+    }
+
+    /// Caps the inner alignment element along one axis, keeping its
+    /// min-content size as the floor. `null` removes the cap.
+    private static _capInner(
+        inner: HTMLElement,
+        axis: "width" | "height",
+        maxSize: number | null
+    ): void {
+        if (maxSize === null) {
+            inner.style.removeProperty(`max-${axis}`);
+            inner.style.removeProperty(`min-${axis}`);
+        } else {
+            inner.style.setProperty(`max-${axis}`, `${maxSize}rem`);
+            inner.style.setProperty(`min-${axis}`, "min-content");
+        }
     }
 
     // SCROLLING-REWORK
